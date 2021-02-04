@@ -7,6 +7,8 @@
 #include <string.h> 
 #include <unistd.h>
 #include <pwd.h>    
+#include <ctype.h>
+#include <termios.h>
 #include <sys/types.h>
 #include <sys/wait.h>   
 
@@ -14,6 +16,7 @@
 #include "lsh_dict.h"
 
 int main() {
+    tcgetattr(STDIN_FILENO, &oldt);
     map = new_map();
     loop();
     free_map(map);
@@ -21,14 +24,13 @@ int main() {
 }
 
 void loop() {
-    int i = 0;
     do {
         print_promot();
-        if ((i = read_line()) == 1) {
+        if (read_line() == 1) {
             char ** argv = split_command(cmdLine);
             execute(argv);
             free(argv);
-        } 
+        }
     } while (1);
 }
 
@@ -99,18 +101,25 @@ int print_promot() {
     return i;
 }
 
-int sigint() {
-    if (cmd_idx == 0 && (getchar() == 3)) {
-        printf("\n\r");
-        system("stty cooked");
-        exit_lsh();
+int keydonw_ctrl_c() {
+    printf("^C");
+    if (cmd_idx == 0) {
+        printf("\nPress Ctrl-C again to quit lsh");
+        if (3 == getchar()) {
+            printf("\n\r");
+            tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+            exit_lsh();
+        } else {
+            printf("\n\r");
+        }
     } else {
         printf("\n\r");
     }
+
     return 0;
 }
 
-int cleanscreen() {
+int keydown_ctrl_l() {
     char * argv[2];
     argv[0] = "clear";
     argv[1] = NULL;
@@ -131,16 +140,27 @@ int cleanscreen() {
     return 0;
 }
 
-int carriage() {
-    printf("\b\b  \b\b\r\n");
+int keydown_enter() {
+    printf("\r\n");
     return 0;
 }
 
-int backspace() {
-    printf("\b\b  \b\b");
+int keydown_backspace() {
     if (cmd_idx) {
         printf("\b \b");
         cmdLine[--cmd_idx] = '\0';
+    }
+    return 0;
+}
+
+int keydown_tab() {
+    return 0;
+}
+
+int show_char(int c) {
+    if (isprint(c)) {
+        cmdLine[cmd_idx++] = (char)c;
+        printf("%c", c);
     }
     return 0;
 }
@@ -151,31 +171,47 @@ int read_line() {
 
     int c = 0, read_state = 0;
 
-    system("/bin/stty raw");
+    tcgetattr(STDIN_FILENO, &oldt);
+
+    newt = oldt;
+    newt.c_lflag &= ~ECHO;
+    newt.c_lflag &= ~ICANON;
+    newt.c_lflag &= ~ISIG;
+
+    tcsetattr(STDIN_FILENO, TCSANOW, &newt);
 
     do {
-        switch(c = getchar()) {
-            case 3:
-                sigint();
+        c = getchar();
+        switch(c) {
+            case 3:     // CTRL-C
+                keydonw_ctrl_c();
                 read_state = -1;
                 break;
-            case 12:
-                cleanscreen();
+            case 12:    // CTRL-L
+                keydown_ctrl_l();
                 read_state = -1;
+                break;
+            case 9:     // tab
+                keydown_tab();
+                break;
+            case 10:
+                keydown_enter();
+                read_state = 1;
                 break;
             case 13:
-                carriage();
+                keydown_enter();
                 read_state = 1;
                 break;
             case 127:
-                backspace();
+                keydown_backspace();
                 break;
             default:
-                cmdLine[cmd_idx++] = c;
+                show_char(c);
+                break;
         }
     } while (!read_state);
-
-    system("/bin/stty cooked");
+    
+    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
 
     return read_state;
 }
@@ -322,7 +358,19 @@ int builtin_exit(char ** argv) {
     exit_lsh();
     return 0;
 }
+
 int builtin_help(char ** argv) {
     printf("running help\n");
+    return 0;
+}
+
+int builtin_type(char ** argv) {
+    int i = 0;
+    for (; i < builtin_func_cnt(); ++i) {
+        if (strcmp(builtin_str[i], argv[1]) == 0) {
+            printf("%s is a lsh builtin function\n", argv[1]);
+            break;
+        }
+    }
     return 0;
 }
