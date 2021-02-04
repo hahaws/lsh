@@ -17,6 +17,7 @@
 
 int main() {
     tcgetattr(STDIN_FILENO, &oldt);
+    signal(SIGINT, SIG_IGN);
     map = new_map();
     loop();
     free_map(map);
@@ -27,9 +28,14 @@ void loop() {
     do {
         print_promot();
         if (read_line() == 1) {
-            char ** argv = split_command(cmdLine);
+            strip(cmdLine);
+            if (!cmdLine[0]) {
+                continue;
+            }
+            char ** argv = lines_calloc();
+            split_command(cmdLine, argv);
             execute(argv);
-            free(argv);
+            free_lines(&argv);
         }
     } while (1);
 }
@@ -37,6 +43,47 @@ void loop() {
 int exit_lsh() {
     printf("Exit lsh\n");
     exit(0);
+}
+
+int cmd_access(const char * cmd, char * abs_path, int len) {
+    int i = 0, x = -1;
+    for (; i < PATH_CNT; ++i) {
+        memset(abs_path, '\0', len);
+        strcat(abs_path, PATH[i]);
+        strcat(abs_path, cmd);
+        if (access(abs_path, F_OK) < 0) {
+            continue;
+        }
+        if (access(abs_path, X_OK) == 0) {
+            x = 0;
+            break;
+        }
+    }
+    return x;
+}
+
+int get_path() {
+    char * all_path;
+    all_path = getenv("PATH");
+    int i = 0, j = 0, idx = 0;
+    while (all_path[idx]) {
+        if (all_path[idx] == ':') {
+            if (PATH[i][j] != '/') 
+                PATH[i][j++] = '/';
+            PATH[i][j] = '\0';
+            ++i;
+            j = 0;
+        } else {
+            PATH[i][j++] = all_path[idx];
+        }
+        ++idx;
+    }
+    if (PATH[i][j] != '/') 
+        PATH[i][j++] = '/';
+    PATH[i][j] = '\0';
+
+    PATH_CNT = i;
+    return i;
 }
 
 int get_user() {
@@ -82,13 +129,13 @@ int get_dir() {
         }
     }
 
-    memset(currPath, '\0', LINEMAX);
+    memset(CURPWD, '\0', LINEMAX);
     int offset = 0;
     if (is__user) {
-        strcat(currPath, "~");
+        strcat(CURPWD, "~");
         offset = strlen(user_home);
     }
-    strcat(currPath, curr_abs_path + offset);
+    strcat(CURPWD, curr_abs_path + offset);
 
     return 0;
 }
@@ -96,7 +143,7 @@ int get_dir() {
 int print_promot() {
     int i = get_dir();
     if (0 == i) {
-        printf("lsh %s > ", currPath);
+        printf("lsh %s > ", CURPWD);
     }
     return i;
 }
@@ -216,26 +263,84 @@ int read_line() {
     return read_state;
 }
 
-char ** split_command(const char * cmd) {
+int strip(char * cmd) {
+    char tmp[LINEMAX];
+    int i = 0;
+    while (cmd[i]) {
+        if (cmd[i] != ' ') {
+            break;
+        }
+        ++i;
+    }
 
-    char * t = strdup(cmd), * tt = strdup(cmd);
-    int seplen = 1;
-    while (strsep(&t, " ") != NULL) 
-        seplen ++;
-    char ** argv = (char **)malloc(seplen * sizeof(char *));
-    memset(argv, 0, seplen);
+    int j = strlen(cmd) - 1;
+    while (cmd[j]) {
+        if (cmd[j] != ' ') {
+            break;
+        }
+        --j;
+    }
 
-    char * tk;
     int idx = 0;
-    do {
-        tk = strsep(&tt, " ");
-        argv[idx++] = tk;
-    } while (tk != NULL);
+    for (; i <= j; ++i) {
+        tmp[idx++] = cmd[i];
+    }
 
-    free(t);
-    free(tt);
+    for (i = 0; i <= idx; ++i) {
+        cmd[i] = tmp[i];
+    }
+    cmd[i] = '\0';
+    return 0;
+}
 
-    return argv;
+char ** lines_calloc() {
+    char ** lines = (char **)calloc(LINEMAX, sizeof(char *));
+    int i = 0;
+    for (; i < LINEMAX; ++i) 
+        lines[i] = NULL;
+    return lines;
+}
+
+void free_lines(char *** plines) {
+    if (*plines == NULL) {
+        return;
+    }
+    char ** lines = *plines;
+    int i = 0;
+    for (; i < LINEMAX; ++i) {
+        if (lines[i]) {
+            free(lines[i]);
+            lines[i] = NULL;
+        }
+    }
+    free(lines);
+    *plines = NULL;
+}
+
+int split_command(const char * cmd, char ** argv) {
+    if (!cmd[0]) {
+        return -1;
+    }
+    argv[0] = (char *)calloc(LINEMAX, sizeof(char));
+    int i = 0, r = 0, c = 0, prespace = 0;
+    while (cmd[i]) {
+        if (cmd[i] == ' ') {
+            prespace = 1;
+        } else {
+            if (prespace) {
+                argv[r][c] = '\0';
+                ++r;
+                argv[r] = (char *)calloc(LINEMAX, sizeof(char));
+                c = 0;
+            } 
+            argv[r][c] = cmd[i];
+            ++c;
+            prespace = 0;
+        }
+        ++i;
+    }
+    argv[r][c] = '\0';
+    return 0;
 }
 
 int execute(char ** argv) {
@@ -246,12 +351,15 @@ int execute(char ** argv) {
             return (*builtin_func[i])(argv);
         } else if (argv[1] == NULL && (entry = find_entry(map, argv[0])) != NULL) {
             char * cmd = (char *)entry->value;
-            char ** _argv = split_command(cmd);
+            strip(cmd);
+            char ** _argv = lines_calloc();
+            split_command(cmd, _argv);
             int res = execute(_argv);
-            free(_argv);
+            free_lines(&_argv);
             return res;
         }
     }
+
     return execute_process(argv);
 }
 
@@ -262,7 +370,7 @@ int execute_process(char ** argv) {
         return -1;
     } else if (pid == 0) {
         execvp(argv[0], argv);
-        PRI_ERR("Execute %s Error\n", cmdLine);
+        PRI_ERR("Execute %s by process Error\n", cmdLine);
         exit(127);
     }
 
@@ -336,6 +444,14 @@ int builtin_cd(char ** argv) {
         to_path = "~";
     }
 
+    if (to_path[0] == '-') {
+        if (OLDPWD_SET == 0) {
+            PRI_ERR("lsh: cd OLDPWD Not set\n");
+            return -1;
+        }
+        to_path = OLDPWD;
+    }
+
     char to_abs_path[LINEMAX];
     memset(to_abs_path, '\0', LINEMAX);
 
@@ -352,6 +468,10 @@ int builtin_cd(char ** argv) {
         return -1;
     }
 
+    memset(OLDPWD, '\0', sizeof(OLDPWD));
+    strcpy(OLDPWD, CURPWD);
+    OLDPWD_SET = 1;
+
     return 0;
 }
 int builtin_exit(char ** argv) {
@@ -366,11 +486,21 @@ int builtin_help(char ** argv) {
 
 int builtin_type(char ** argv) {
     int i = 0;
+    if (argv[1] == NULL) {
+        return 0;
+    }
     for (; i < builtin_func_cnt(); ++i) {
         if (strcmp(builtin_str[i], argv[1]) == 0) {
             printf("%s is a lsh builtin function\n", argv[1]);
             break;
         }
     }
+
+    sd_entry * entry = find_entry(map, argv[1]);
+    if (entry != NULL) {
+        char * cmd = (char *)entry->value;
+        printf("%s is aliased to `%s`\n", argv[1], cmd);
+    }
+
     return 0;
 }

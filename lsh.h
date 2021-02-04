@@ -17,6 +17,9 @@
 
 #define LINEMAX 4096
 
+char PATH[LINEMAX][LINEMAX];
+int PATH_CNT = 0;
+
 struct termios oldt, newt;
 
 const char * builtin_str[] = {
@@ -51,7 +54,9 @@ int cmd_idx;
 
 char promot[LINEMAX];
 char currUser[LINEMAX];
-char currPath[LINEMAX];
+char CURPWD[LINEMAX];
+char OLDPWD[LINEMAX];
+int OLDPWD_SET = 0;
 
 pid_t pid;
 int pid_status;
@@ -65,13 +70,18 @@ int keydown_ctrl_l();
 int keydonw_ctrl_c();
 
 int show_char(int c);
+int get_path();
+int cmd_access(const char * cmd, char * abs_path, int len);
 int get_dir();
 int get_user();
 int print_promot();
 int execute(char ** argv);
 int execute_process(char ** argv);
 int read_line();
-char ** split_command(const char * cmd);
+int strip(char * cmd);
+char ** lines_calloc();
+void free_lines(char *** lines);
+int split_command(const char * cmd, char ** argv);
 void loop();
 
 #endif // __LSH_H__
