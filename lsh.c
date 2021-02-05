@@ -47,6 +47,16 @@ int exit_lsh() {
     exit(0);
 }
 
+int is_path(const char * cmd) {
+    while (*cmd) {
+        if (*cmd == '/') {
+            return 1;
+        }
+        cmd ++;
+    }
+    return 0;
+}
+
 int cmd_access(const char * cmd, char * abs_path, int len) {
     int i = 0, x = -1;
     for (; i < PATH_CNT; ++i) {
@@ -377,11 +387,15 @@ int execute(char ** argv) {
     }
 
     char abs_path[LINEMAX];
-
-    int ret = cmd_access(argv[0], abs_path, LINEMAX);
-    if (ret == 0) {
-        memset(argv[0], '\0', LINEMAX);
-        strcpy(argv[0], abs_path);
+    if (is_path(argv[0]) == 0) {
+        int ret = cmd_access(argv[0], abs_path, LINEMAX);
+        if (ret == 0) {
+            memset(argv[0], '\0', LINEMAX);
+            strcpy(argv[0], abs_path);
+        } else {
+            PRI_ERR("Command '%s' not found.\n", argv[0]);
+            return 0;
+        }
     }
 
     return execute_process(argv);

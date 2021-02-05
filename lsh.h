@@ -72,6 +72,7 @@ int keydonw_ctrl_c();
 
 int show_char(int c);
 int get_path();
+int is_path(const char * cmd);
 int cmd_access(const char * cmd, char * abs_path, int len);
 int get_time();
 int get_dir();
