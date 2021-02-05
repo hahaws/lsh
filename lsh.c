@@ -370,6 +370,7 @@ int split_command(const char * cmd, char ** argv) {
             if (*cmd == '"' || *cmd == '\'') {
                 quote = *cmd;
                 in_quote = 1;
+                cmd++;
                 continue;
             }
         }
