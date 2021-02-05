@@ -36,7 +36,6 @@ void loop() {
             }
             char ** argv = lines_calloc();
             split_command(cmdLine, argv);
-            printf("%s", argv[3]);
             execute(argv);
             free_lines(&argv);
         }
