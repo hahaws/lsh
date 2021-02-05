@@ -343,27 +343,37 @@ int split_command(const char * cmd, char ** argv) {
     if (!cmd[0]) {
         return -1;
     }
-
     argv[0] = (char *)calloc(LINEMAX, sizeof(char));
-    int i = 0, r = 0, c = 0, prespace = 0;
-    while (cmd[i]) {
-        if (cmd[i] == ' ') {
-            prespace = 1;
-        } else {
-            if (prespace) {
-                argv[r][c] = '\0';
-                ++r;
-                argv[r] = (char *)calloc(LINEMAX, sizeof(char));
-                c = 0;
-            } 
-            argv[r][c] = cmd[i];
-            ++c;
-            prespace = 0;
+    int i = 0, j = 0, prespace = 0, in_quote = 0, quote;
+    while (*cmd) {
+        if (in_quote) {
+            if (quote == *cmd) 
+                in_quote = 0;
+            argv[i][j++] = *cmd++;
+            continue;
         }
-        ++i;
-    }
-    argv[r][c] = '\0';
+        if (*cmd == ' ') {
+            if (in_quote) 
+                argv[i][j++] = *cmd;
+            else
+                prespace = 1;
+            ++cmd;
+            continue;
+        }
+        if (prespace) {
+            argv[i++][j] = '\0';
+            j = 0;
+            argv[i] = (char *)calloc(LINEMAX, sizeof(char));
+            prespace = 0;
+            if (*cmd == '"' || *cmd == '\'') {
+                quote = *cmd;
+                in_quote = 1;
+            }
+        }
 
+        argv[i][j++] = *cmd++;
+    }
+    argv[i][j] = '\0';
     return 0;
 }
 
