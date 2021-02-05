@@ -53,6 +53,7 @@ char cmdLine[LINEMAX];
 int cmd_idx;
 
 char promot[LINEMAX];
+char CURRTIME[LINEMAX];
 char currUser[LINEMAX];
 char CURPWD[LINEMAX];
 char OLDPWD[LINEMAX];
@@ -72,6 +73,7 @@ int keydonw_ctrl_c();
 int show_char(int c);
 int get_path();
 int cmd_access(const char * cmd, char * abs_path, int len);
+int get_time();
 int get_dir();
 int get_user();
 int print_promot();

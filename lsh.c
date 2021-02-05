@@ -8,6 +8,7 @@
 #include <unistd.h>
 #include <pwd.h>    
 #include <ctype.h>
+#include <time.h>
 #include <termios.h>
 #include <sys/types.h>
 #include <sys/wait.h>   
@@ -18,6 +19,7 @@
 int main() {
     tcgetattr(STDIN_FILENO, &oldt);
     signal(SIGINT, SIG_IGN);
+    get_path();
     map = new_map();
     loop();
     free_map(map);
@@ -60,6 +62,16 @@ int cmd_access(const char * cmd, char * abs_path, int len) {
         }
     }
     return x;
+}
+
+int get_time() {
+    time_t local_time;
+    struct tm * t;
+    time(&local_time);
+    t = gmtime(&local_time);
+    memset(CURRTIME, '\0', LINEMAX);
+    sprintf(CURRTIME, "%02d:%02d:%02d", t->tm_hour + 8, t->tm_min, t->tm_sec);
+    return 0;
 }
 
 int get_path() {
@@ -142,8 +154,9 @@ int get_dir() {
 
 int print_promot() {
     int i = get_dir();
+    get_time();
     if (0 == i) {
-        printf("lsh %s > ", CURPWD);
+        printf("%s %s > ", CURRTIME, CURPWD);
     }
     return i;
 }
@@ -264,32 +277,31 @@ int read_line() {
 }
 
 int strip(char * cmd) {
-    char tmp[LINEMAX];
-    int i = 0;
-    while (cmd[i]) {
-        if (cmd[i] != ' ') {
-            break;
-        }
-        ++i;
+    size_t size;
+    char * end;
+    
+    size = strlen(cmd);
+
+    if (!size) {
+        return 0;
     }
 
-    int j = strlen(cmd) - 1;
-    while (cmd[j]) {
-        if (cmd[j] != ' ') {
-            break;
-        }
-        --j;
-    }
+    end = cmd + size - 1;
+    while (end >= cmd && isspace(*end))
+        end--;
+    *(end + 1) = '\0';
 
-    int idx = 0;
-    for (; i <= j; ++i) {
-        tmp[idx++] = cmd[i];
-    }
+    char * s = cmd;
+    while (*s && isspace(*s))
+        s++;
 
-    for (i = 0; i <= idx; ++i) {
-        cmd[i] = tmp[i];
+    while (*s) {
+        *cmd = *s;
+        cmd++;
+        s++;
     }
-    cmd[i] = '\0';
+    *cmd = '\0';
+
     return 0;
 }
 
@@ -321,6 +333,7 @@ int split_command(const char * cmd, char ** argv) {
     if (!cmd[0]) {
         return -1;
     }
+
     argv[0] = (char *)calloc(LINEMAX, sizeof(char));
     int i = 0, r = 0, c = 0, prespace = 0;
     while (cmd[i]) {
@@ -340,6 +353,7 @@ int split_command(const char * cmd, char ** argv) {
         ++i;
     }
     argv[r][c] = '\0';
+
     return 0;
 }
 
@@ -349,15 +363,25 @@ int execute(char ** argv) {
     for (; i < builtin_func_cnt(); ++i) {
         if (strcmp(argv[0], builtin_str[i]) == 0) {
             return (*builtin_func[i])(argv);
-        } else if (argv[1] == NULL && (entry = find_entry(map, argv[0])) != NULL) {
-            char * cmd = (char *)entry->value;
-            strip(cmd);
-            char ** _argv = lines_calloc();
-            split_command(cmd, _argv);
-            int res = execute(_argv);
-            free_lines(&_argv);
-            return res;
         }
+    }
+
+    if (argv[1] == NULL && (entry = find_entry(map, argv[0])) != NULL) {
+        char * cmd = (char *)entry->value;
+        strip(cmd);
+        char ** _argv = lines_calloc();
+        split_command(cmd, _argv);
+        int res = execute(_argv);
+        free_lines(&_argv);
+        return res;
+    }
+
+    char abs_path[LINEMAX];
+
+    int ret = cmd_access(argv[0], abs_path, LINEMAX);
+    if (ret == 0) {
+        memset(argv[0], '\0', LINEMAX);
+        strcpy(argv[0], abs_path);
     }
 
     return execute_process(argv);
@@ -369,8 +393,8 @@ int execute_process(char ** argv) {
         PRI_ERR("Fork Error\n");
         return -1;
     } else if (pid == 0) {
-        execvp(argv[0], argv);
-        PRI_ERR("Execute %s by process Error\n", cmdLine);
+        execv(argv[0], argv);
+        PRI_ERR("Execute Program `%s` Error\n", argv[0]);
         exit(127);
     }
 
@@ -410,12 +434,13 @@ int builtin_alias(char ** argv) {
 
     strcat(alias_to, argv[1]);
 
-    int idx = 2;
-    for (;;) {
-        strcat(alias_from, argv[idx++]);
-        if (argv[idx] == NULL) 
-            break;
+    strcat(alias_from, argv[2]);
+
+    int idx = 3;
+    while (argv[idx]) {
         strcat(alias_from, " ");
+        strcat(alias_from, argv[idx]);
+        ++idx;
     }
 
     insert_map(map, alias_to, alias_from);
