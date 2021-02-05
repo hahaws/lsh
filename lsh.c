@@ -349,7 +349,9 @@ int split_command(const char * cmd, char ** argv) {
         if (in_quote) {
             if (quote == *cmd) 
                 in_quote = 0;
-            argv[i][j++] = *cmd++;
+            else
+                argv[i][j++] = *cmd;
+            cmd++;
             continue;
         }
         if (*cmd == ' ') {
@@ -368,9 +370,9 @@ int split_command(const char * cmd, char ** argv) {
             if (*cmd == '"' || *cmd == '\'') {
                 quote = *cmd;
                 in_quote = 1;
+                continue;
             }
         }
-
         argv[i][j++] = *cmd++;
     }
     argv[i][j] = '\0';
