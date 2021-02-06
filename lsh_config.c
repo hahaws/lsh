@@ -10,17 +10,13 @@
 
 int open_config() {
     file = fopen(".lshrc", "r");
-    if (file == NULL) {
-        end_file = 1;
+    if (file == NULL) 
         return 0;
-    }
-    end_file = 0;
     return 1;
 }
 
 int close_config() {
     fclose(file);
-    end_file = 1;
     return 0;
 }
 
