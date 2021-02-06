@@ -29,7 +29,7 @@ typedef struct __sh_dict_map
 
 
 sd_map * new_map();
-void free_map(sd_map *);
+void free_map(sd_map **);
 void insert_map(sd_map *, void *, void *);
 void delete_entry(sd_map *, void *);
 void delete_entry_idx(sd_map *, int);

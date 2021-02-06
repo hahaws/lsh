@@ -27,9 +27,9 @@ sd_map * new_map() {
     return map;
 }
 
-void free_map(sd_map * map) {
-    free(map->entry);
-    free(map);
+void free_map(sd_map ** map) {
+    free((*map)->entry);
+    free(*map);
 }
 
 void insert_map(sd_map * map, void * key, void * value) {
