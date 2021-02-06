@@ -14,16 +14,33 @@
 #include <sys/wait.h>   
 
 #include "lsh.h"
+#include "lsh_config.h"
 #include "lsh_dict.h"
 
 int main() {
+    init();
+    loop();
+    free_map(&map);
+    return EXIT_SUCCESS;
+}
+
+void init() {
     tcgetattr(STDIN_FILENO, &oldt);
     signal(SIGINT, SIG_IGN);
     get_path();
     map = new_map();
-    loop();
-    free_map(map);
-    return EXIT_SUCCESS;
+    open_config();
+    char line[LINEMAX];
+    int can = 0;
+    while ((can = read_config(line, LINEMAX)) != 0) {
+        if (can > 0) {
+            char ** argv = lines_calloc();
+            split_command(line, argv);
+            execute(argv);
+            free_lines(&argv);
+        }
+    }
+    close_config();
 }
 
 void loop() {
@@ -43,6 +60,7 @@ void loop() {
 }
 
 int exit_lsh() {
+    free_map(&map);
     printf("Exit lsh\n");
     exit(0);
 }

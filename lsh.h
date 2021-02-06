@@ -86,5 +86,6 @@ char ** lines_calloc();
 void free_lines(char *** lines);
 int split_command(const char * cmd, char ** argv);
 void loop();
+void init();
 
 #endif // __LSH_H__
