@@ -1,0 +1,15 @@
+
+# Comment line start with '#'
+
+alias ll ls -AlF
+
+# Comment
+alias la ls -A
+
+    # Comment  
+    #
+
+alias lh ls -alh
+
+
+
