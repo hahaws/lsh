@@ -50,6 +50,7 @@ int (*builtin_func[]) (char **) = {
 int builtin_func_cnt();
 
 char cmdLine[LINEMAX];
+char runCmd[LINEMAX];
 int cmd_idx;
 
 char promot[LINEMAX];
@@ -84,8 +85,9 @@ int read_line();
 int strip(char * cmd);
 char ** lines_calloc();
 void free_lines(char *** lines);
-int split_command(const char * cmd, char ** argv);
+int run_command(char * cmd);
 void loop();
 void init();
+void handle_argv(int argc, char ** argv);
 
 #endif // __LSH_H__

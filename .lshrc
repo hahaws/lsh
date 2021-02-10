@@ -1,7 +1,7 @@
 
 # Comment line start with '#'
 
-alias ll ls -AlF
+alias ll ls -Alh
 
 # Comment
 alias la ls -A

@@ -6,22 +6,41 @@
 #include <stdlib.h>
 #include <string.h> 
 #include <unistd.h>
+#include <dirent.h>
 #include <pwd.h>    
 #include <ctype.h>
+#include <fcntl.h>
 #include <time.h>
 #include <termios.h>
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <sys/wait.h>   
 
 #include "lsh.h"
 #include "lsh_config.h"
 #include "lsh_dict.h"
+#include "lsh_parser.h"
 
-int main() {
-    init();
-    loop();
-    free_map(&map);
+int main(int argc, char ** argv) {
+    if (argc == 1) {
+        init();
+        loop();
+        free_map(&map);
+    } else {
+        handle_argv(argc, argv);
+    }
     return EXIT_SUCCESS;
+}
+
+void handle_argv(int argc, char ** argv) {
+    if (argc == 2) {
+        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+            builtin_help(NULL);
+            return;
+        }
+    } 
+
+    printf("lsh: Unrecongnized option '%s'\nTry: 'lsh -h' or 'lsh --help' for more information\n", argv[1]);
 }
 
 void init() {
@@ -34,10 +53,7 @@ void init() {
     int can = 0;
     while ((can = read_config(line, LINEMAX)) != 0) {
         if (can > 0) {
-            char ** argv = lines_calloc();
-            split_command(line, argv);
-            execute(argv);
-            free_lines(&argv);
+            run_command(line);
         }
     }
     close_config();
@@ -47,14 +63,7 @@ void loop() {
     do {
         print_promot();
         if (read_line() == 1) {
-            strip(cmdLine);
-            if (!cmdLine[0]) {
-                continue;
-            }
-            char ** argv = lines_calloc();
-            split_command(cmdLine, argv);
-            execute(argv);
-            free_lines(&argv);
+            run_command(runCmd);
         }
     } while (1);
 }
@@ -184,7 +193,7 @@ int print_promot() {
     int i = get_dir();
     get_time();
     if (0 == i) {
-        printf("%s %s > ", CURRTIME, CURPWD);
+        printf("%s %s > %s", CURRTIME, CURPWD, cmdLine);
     }
     return i;
 }
@@ -198,9 +207,13 @@ int keydonw_ctrl_c() {
             tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
             exit_lsh();
         } else {
+            memset(cmdLine, '\0', LINEMAX);
+            cmd_idx = 0;
             printf("\n\r");
         }
     } else {
+        memset(cmdLine, '\0', LINEMAX);
+        cmd_idx = 0;
         printf("\n\r");
     }
 
@@ -229,6 +242,9 @@ int keydown_ctrl_l() {
 }
 
 int keydown_enter() {
+    strcpy(runCmd, cmdLine);
+    memset(cmdLine, '\0', LINEMAX);
+    cmd_idx = 0;
     printf("\r\n");
     return 0;
 }
@@ -242,7 +258,93 @@ int keydown_backspace() {
 }
 
 int keydown_tab() {
-    return 0;
+    int len = strlen(cmdLine);
+    if (len <= 0) {
+        return -1;
+    }
+    char tdir[LINEMAX] = {0};
+    char pre[LINEMAX] = {0};
+    int pre_len = 0;
+    if (isspace(cmdLine[len - 1]))
+        strcpy(tdir, "./");
+    else {
+        int i = len - 1;
+        while (!isspace(cmdLine[i]))
+            --i;
+        ++i;
+        int j = i, ii = i;
+        while (ii < len) {
+            if (cmdLine[ii] == '/')
+                j = ii;
+            ++ii;
+        }
+        strncpy(tdir, cmdLine + i, j - i + 1);
+        strcpy(pre, cmdLine + j + 1);
+    } 
+    pre_len = strlen(pre);
+
+    char pdir[LINEMAX] = {0};
+    if (tdir[0] == '~') {
+        strcat(pdir, "/home/");
+        strcat(pdir, currUser);
+        strcat(pdir, tdir + 1);
+    } else {
+        strcat(pdir, tdir);
+    }
+
+    
+    DIR * _dir;
+    struct dirent * ptr;
+    _dir = opendir(pdir);
+    if (_dir == NULL) {
+        return -1;
+    }
+    char ** files = (char **)calloc(LINEMAX, sizeof(char *));
+    int files_cnt = 0;
+    int l = 0, dif = 0;
+    while ((ptr = readdir(_dir)) != NULL) {
+        if (strcmp(ptr->d_name, ".") == 0 || strcmp(ptr->d_name, "..") == 0)
+            continue;
+        if (pre_len == 0 || (l = is_start_with(ptr->d_name, pre))) {
+            files[files_cnt] = (char *)calloc(LINEMAX, sizeof(char));
+            char pth[LINEMAX] = {0};
+            strcat(pth, pdir);
+            strcat(pth, ptr->d_name);
+            struct stat st;
+            stat(pth, &st);
+            if (S_ISDIR(st.st_mode))
+                strcat(ptr->d_name, "/");
+            strcat(files[files_cnt++], ptr->d_name);
+            dif = l;
+        }
+    }
+    if (files_cnt == 0) {
+        free(files);
+        closedir(_dir);
+        return 0;
+    }
+    else if (files_cnt == 1) {
+        char * p = files[0];
+        char * f = p + dif;
+        while (*f)
+            show_char(*f++);
+        free(p);
+        free(files);
+        closedir(_dir);
+        return 0;
+    }
+    else if (files_cnt > 1) {
+        printf("\n");
+        do {
+            printf("%s\t", files[--files_cnt]);
+            free(files[files_cnt]);
+        } while (files_cnt);
+        printf("\n");
+        free(files);
+        closedir(_dir);
+        return -1;
+    }
+    return -1;
 }
 
 int show_char(int c) {
@@ -254,8 +356,6 @@ int show_char(int c) {
 }
 
 int read_line() {
-    memset(cmdLine, '\0', LINEMAX);
-    cmd_idx = 0;
 
     int c = 0, read_state = 0;
 
@@ -280,7 +380,7 @@ int read_line() {
                 read_state = -1;
                 break;
             case 9:     // tab
-                keydown_tab();
+                read_state = keydown_tab();
                 break;
             case 10:
                 keydown_enter();
@@ -357,45 +457,20 @@ void free_lines(char *** plines) {
     *plines = NULL;
 }
 
-int split_command(const char * cmd, char ** argv) {
-    if (!cmd[0]) {
-        return -1;
+
+int run_command(char * cmd) {
+    strip(cmd);
+    if (!(*cmd) && cmd[0] == '\0')
+        return 0;
+    char ** argv = lines_calloc();
+    int res = 0;
+    int n = 0;
+    if ((n = command_parser(cmd, argv))) {
+        res = execute(argv);
     }
-    argv[0] = (char *)calloc(LINEMAX, sizeof(char));
-    int i = 0, j = 0, prespace = 0, in_quote = 0, quote;
-    while (*cmd) {
-        if (in_quote) {
-            if (quote == *cmd) 
-                in_quote = 0;
-            else
-                argv[i][j++] = *cmd;
-            cmd++;
-            continue;
-        }
-        if (*cmd == ' ') {
-            if (in_quote) 
-                argv[i][j++] = *cmd;
-            else
-                prespace = 1;
-            ++cmd;
-            continue;
-        }
-        if (prespace) {
-            argv[i++][j] = '\0';
-            j = 0;
-            argv[i] = (char *)calloc(LINEMAX, sizeof(char));
-            prespace = 0;
-            if (*cmd == '"' || *cmd == '\'') {
-                quote = *cmd;
-                in_quote = 1;
-                cmd++;
-                continue;
-            }
-        }
-        argv[i][j++] = *cmd++;
-    }
-    argv[i][j] = '\0';
-    return 0;
+    reset_stdio();
+    free_lines(&argv);
+    return res;
 }
 
 int execute(char ** argv) {
@@ -409,12 +484,7 @@ int execute(char ** argv) {
 
     if (argv[1] == NULL && (entry = find_entry(map, argv[0])) != NULL) {
         char * cmd = (char *)entry->value;
-        strip(cmd);
-        char ** _argv = lines_calloc();
-        split_command(cmd, _argv);
-        int res = execute(_argv);
-        free_lines(&_argv);
-        return res;
+        return run_command(cmd);
     }
 
     char abs_path[LINEMAX];
@@ -521,7 +591,7 @@ int builtin_cd(char ** argv) {
         }
         to_path = OLDPWD;
     }
-
+    
     char to_abs_path[LINEMAX];
     memset(to_abs_path, '\0', LINEMAX);
 
@@ -531,6 +601,13 @@ int builtin_cd(char ** argv) {
         strcat(to_abs_path, to_path + 1);
     } else {
         strcat(to_abs_path, to_path);
+    }
+
+    struct stat info;
+    stat(to_abs_path, &info);
+    if (!S_ISDIR(info.st_mode)) {
+        PRI_ERR("lsh: cd %s is not a directory\n", to_path);
+        return -1;
     }
 
     if (chdir(to_abs_path) != 0) {
@@ -550,7 +627,18 @@ int builtin_exit(char ** argv) {
 }
 
 int builtin_help(char ** argv) {
-    printf("running help\n");
+    char buf[LINEMAX];
+    FILE * file;
+    size_t nread;
+
+    file = fopen("./help", "r");
+    if (file) {
+        while ((nread = fread(buf, 1, sizeof(buf), file)) > 0)
+            fwrite(buf, 1, nread, stdout);
+        if (ferror(file))
+            printf("Read help doc error");
+    }
+    fclose(file);
     return 0;
 }
 

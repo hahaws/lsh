@@ -1,0 +1,46 @@
+Little Shell.
+
+lsh is a shell with very few features. Some builtin function and execute external programs.
+
+Builtin Function
+----------------
+
+1. cd
+    change current directory
+    
+    1. use `cd ~` to home folder;
+    2. use `cd -` to last directory;
+
+2. alias
+    alias some command to a brief version. here is the format:
+        alias brief_cmd long version command
+    eg.
+        alias ll ls -Alh
+
+    the different with bash or other shell implementation is not with `=`
+
+3. unalias
+    do not alias command. here is the format 
+        unalias brief_cmd
+
+4. type
+    judge the command is a builtin function or external program.
+    eg.
+        type alias
+        type ping
+
+5. help
+    print help info
+
+6. exit
+    you can exit the lsh with `exit` command. or type Ctrl-C twice.
+
+External Programs
+-----------------
+
+when type a command which is not an builtin function. the lsh will try to find it from PATH. And run the first matched program.
+
+IO Redirection
+--------------
+
+
