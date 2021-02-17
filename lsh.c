@@ -297,6 +297,7 @@ int keydown_tab() {
     struct dirent * ptr;
     _dir = opendir(pdir);
     if (_dir == NULL) {
+        printf("\n\r");
         return -1;
     }
     char ** files = (char **)calloc(LINEMAX, sizeof(char *));
