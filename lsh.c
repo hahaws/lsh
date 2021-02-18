@@ -269,10 +269,9 @@ int keydown_tab() {
         strcpy(tdir, "./");
     else {
         int i = len - 1;
-        while (!isspace(cmdLine[i]))
+        while (i >= 0 && !isspace(cmdLine[i]))
             --i;
-        ++i;
-        int j = i, ii = i;
+        int j = i, ii = i + 1;
         while (ii < len) {
             if (cmdLine[ii] == '/')
                 j = ii;
@@ -282,6 +281,13 @@ int keydown_tab() {
         strcpy(pre, cmdLine + j + 1);
     } 
     pre_len = strlen(pre);
+
+    strip(tdir);
+    strip(pre);
+    
+    if (!*tdir) {
+        strcat(tdir, "./");
+    }
 
     char pdir[LINEMAX] = {0};
     if (tdir[0] == '~') {
@@ -297,8 +303,7 @@ int keydown_tab() {
     struct dirent * ptr;
     _dir = opendir(pdir);
     if (_dir == NULL) {
-        printf("\n\r");
-        return -1;
+        return 0;
     }
     char ** files = (char **)calloc(LINEMAX, sizeof(char *));
     int files_cnt = 0;
@@ -329,6 +334,7 @@ int keydown_tab() {
         char * f = p + dif;
         while (*f)
             show_char(*f++);
+        show_char(' ');
         free(p);
         free(files);
         closedir(_dir);
